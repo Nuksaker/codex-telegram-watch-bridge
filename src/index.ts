@@ -4,6 +4,7 @@ import { createLogger } from './logging.js';
 import { BridgeDatabase } from './storage/database.js';
 import { GrammyTelegramTransport } from './telegram/bot.js';
 import { ProcessCodexRunner } from './codex/resume.js';
+import { renderCodexProgress, renderRealtimeViewerReady } from './codex/progress.js';
 import { ResumeQueue } from './codex/queue.js';
 import { BridgeService } from './server/bridge-service.js';
 import { buildServer } from './server/app.js';
@@ -18,13 +19,14 @@ const telegram = new GrammyTelegramTransport(
   config.TELEGRAM_ALLOWED_CHAT_ID,
   logger,
 );
-const runner = new ProcessCodexRunner(config.CODEX_BIN, config.MAX_PROMPT_CHARS);
+const runner = new ProcessCodexRunner(config.CODEX_BIN, config.MAX_PROMPT_CHARS, renderCodexProgress);
 const queue = new ResumeQueue(database, runner, config.GLOBAL_CONCURRENCY);
 const service = new BridgeService(config, database, telegram, queue, logger);
 const app = buildServer(config, service, logger);
 const spool = new EventSpool(config.BRIDGE_RUNTIME_DIR);
 
 await app.listen({ host: config.BRIDGE_HOST, port: config.BRIDGE_PORT });
+renderRealtimeViewerReady();
 const interruptedJobs = database.interruptUnfinishedJobs();
 if (interruptedJobs > 0) {
   logger.warn({ interruptedJobs }, 'Marked unfinished jobs as interrupted after bridge restart');

@@ -141,6 +141,11 @@ export class BridgeDatabase {
     return row?.session_id;
   }
 
+  clearActiveTarget(chatId: number): boolean {
+    const result = this.db.prepare('DELETE FROM active_targets WHERE chat_id = ?').run(chatId);
+    return result.changes > 0;
+  }
+
   getSession(sessionId: string): { sessionId: string; cwd: string; project: string; muted: boolean } | undefined {
     const row = this.db.prepare(
       'SELECT session_id, cwd, project_label, muted FROM sessions WHERE session_id = ?',

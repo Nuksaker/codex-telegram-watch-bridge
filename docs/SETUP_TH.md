@@ -55,6 +55,8 @@ codex.cmd login status
 
 การติดตั้งนี้ใช้การลงชื่อเข้าใช้ด้วย ChatGPT จึงไม่ต้องสร้าง OpenAI API key เพิ่ม ดูขั้นตอนล่าสุดได้จาก [คู่มือ Codex CLI](https://developers.openai.com/codex/cli) และ [คู่มือ Authentication](https://developers.openai.com/codex/auth)
 
+bridge ไม่เก็บ token หรือบัญชี Codex ไว้ใน `.env` ของตัวเอง แต่ใช้ credential ของ Codex CLI ที่ Windows user นี้ login อยู่ หากเปลี่ยนบัญชี Codex/ChatGPT ภายหลัง ให้ logout/login Codex CLI ด้วย Windows user เดียวกับที่รัน bridge แล้ว restart bridge หรือ Scheduled Task ตามหัวข้อแก้ปัญหาด้านล่าง
+
 ## 3. เตรียม Telegram และ Apple Watch
 
 1. อัปเดต Telegram บน iPhone
@@ -173,6 +175,10 @@ Set-Location 'D:\Nukker\codex-telegram-watch-bridge'
 npm.cmd run start
 ```
 
+ถ้าเปิดหน้าต่างนี้ไว้บนจอ เมื่อสั่งงานจาก Telegram ระบบจะแสดงการทำงานของ Codex CLI แบบ realtime จาก `codex exec --json` เช่น เริ่มงาน คำสั่งที่กำลังรัน ไฟล์ที่แก้ เครื่องมือที่ใช้ ข้อความล่าสุด และผลสำเร็จหรือล้มเหลว ระบบไม่แสดง reasoning ภายใน และจะปิดบังรูปแบบ token/secret ที่รู้จักก่อนพิมพ์ออกจอ
+
+ไม่ต้องเปิดคำสั่ง `codex` แยกอีกหน้าต่าง เพราะจะเป็น CLI คนละตัวและไม่ติดตาม process ที่ Bridge เปิดอยู่ ให้ใช้หน้าต่าง `npm.cmd run start` นี้เป็น realtime viewer โดยหน้าต่างจะแสดง `รับคำสั่งจาก Telegram` ทันทีเมื่อ Watch ส่งงานเข้ามา
+
 อย่าปิดหน้าต่างนี้ระหว่างการทดสอบ จากนั้นส่งคำสั่งต่อไปนี้ให้ bot ใน Telegram:
 
 ```text
@@ -219,13 +225,23 @@ npm.cmd run doctor
 1. หากมี session เดียว ให้ใช้ Dictation หรือพิมพ์คำสั่งได้เลย เช่น `ตอบกลับเพียงว่า SAME SESSION RESUME OK และห้ามแก้ไฟล์`
 2. หากมีหลาย session ให้ส่ง `/sessions` แล้วเลือกด้วย `/use 1` โดยเปลี่ยนเลขตามรายการ
 3. ส่งคำสั่งเป็นข้อความปกติ ไม่ต้องใช้ฟังก์ชัน Reply ของ Apple Watch
-4. bot ต้องส่งข้อความ `📝 รับงาน #...` ซึ่งมี project, session และสำเนาคำสั่งแบบย่อให้ตรวจว่ารับถูกงาน
-5. bot ต้องส่งสถานะ `▶️ กำลังทำ` แล้วตามด้วย `✅ สำเร็จ` หรือ `❌ ล้มเหลว`
-6. เมื่อ Stop hook ทำงาน จะได้รับข้อความสรุป `สิ่งที่ทำเสร็จ` เพิ่มอีกหนึ่งข้อความ
+4. ดูสถานะ realtime ใน PowerShell ที่รัน `npm.cmd run start` อยู่ จะเห็นบรรทัด `Codex <session> ...` ระหว่างทำงาน
+5. Telegram จะไม่ส่งสถานะระหว่างทาง เมื่อ Stop hook ทำงานจะได้รับข้อความสรุป `สิ่งที่ทำเสร็จ` เพียงครั้งเดียว
+6. หาก CLI เริ่มไม่ได้หรือจบด้วยข้อผิดพลาด bot จะส่ง `❌ งาน #... ล้มเหลว`
 7. ส่ง `/jobs` หรือ `/history` เพื่อดู 5 งานล่าสุด คำสั่งย่อ และสถานะของแต่ละงาน
 8. หาก Codex Desktop ที่เปิดอยู่ไม่ refresh ให้เปิด task เดิมอีกครั้ง ข้อความที่สั่งจาก Telegram จะอยู่ใน session เดิม
 
 Bridge เก็บเพียง hash และข้อความตัวอย่างแบบสั้นสำหรับ `/jobs` โดยแทน token, password, secret และ API key ที่รู้จักด้วย `[REDACTED]` ไม่เก็บคำสั่งดิบฉบับเต็มในฐานข้อมูลประวัติงาน
+
+หาก bot ยังจำ session เก่าที่ไม่ต้องการ ให้ใช้:
+
+```text
+/clear
+/sessions
+/use 1
+```
+
+`/clear` ล้างเฉพาะ session เป้าหมายที่ Telegram จำไว้ ไม่ลบ Codex task, transcript หรือประวัติ `/jobs` หลังล้าง ระบบจะรอให้เลือก `/use <ลำดับ>` ใหม่ก่อนรับข้อความลอยถัดไป
 
 ## 13. เปิด bridge อัตโนมัติหลังเข้าสู่ Windows
 
@@ -240,6 +256,8 @@ npm.cmd run startup:status
 ก่อนทดสอบ Scheduled Task ให้หยุด bridge ที่เปิดด้วยมือด้วย `Ctrl+C` เพื่อไม่ให้พอร์ต `47831` ชนกัน จากนั้น sign out/sign in หรือเริ่ม Task แล้วทดสอบ `/ping` ใหม่
 
 Scheduled Task เป็นแบบ per-user และทำงานหลังผู้ใช้คนนั้นเข้าสู่ Windows หาก sign out, Windows sleep, เครื่องปิด หรืออินเทอร์เน็ตหลุด การควบคุมจาก Telegram จะหยุดชั่วคราว
+
+Scheduled Task ทำงานแบบซ่อนหน้าต่าง จึงไม่เห็น realtime CLI ตอนสาธิต หากต้องการแสดงบนจอ ให้หยุด Task หรือ bridge ตัวเดิมก่อน แล้วเปิด `npm.cmd run start` ใน PowerShell ด้วยมือ อย่าเปิดสองตัวพร้อมกันเพราะพอร์ต `47831` จะชนกัน
 
 ## ปัญหาที่เคยพบและวิธีแก้
 
@@ -275,6 +293,29 @@ codex.cmd login --device-auth
 ```
 
 ตรวจด้วย `codex.cmd login status` ทุกครั้ง อย่ายึดเฉพาะข้อความสำเร็จใน browser
+
+### เปลี่ยนบัญชี Codex หรือ ChatGPT ภายหลัง
+
+ไม่ต้องรัน `npm.cmd run setup` ใหม่หากเปลี่ยนเฉพาะบัญชี Codex/ChatGPT เพราะ `.env` ของ bridge เก็บเฉพาะค่า Telegram, bridge secret, runtime directory และ `CODEX_BIN` ไม่ได้เก็บ credential ของ Codex
+
+ให้หยุด bridge ที่เปิดอยู่ก่อน แล้วเปิด PowerShell ปกติด้วย Windows user เดียวกับที่จะรัน bridge:
+
+```powershell
+codex.cmd logout
+codex.cmd login
+codex.cmd login status
+npm.cmd run doctor
+```
+
+จากนั้นเปิด bridge ใหม่:
+
+```powershell
+npm.cmd run start
+```
+
+หากใช้ Scheduled Task ให้ restart task หรือ sign out/sign in หลังเปลี่ยนบัญชี เพราะ task เป็นแบบ per-user และต้องอ่าน credential ของ Windows user เดียวกัน หากเปลี่ยน Windows user หรือเปลี่ยน `CODEX_HOME` ให้ติดตั้ง hook ใหม่ด้วย `npm.cmd run hook:install` แล้วเปิด `/hooks` ใน Codex เพื่อ review/trust อีกครั้ง
+
+session เก่าที่ bridge จำไว้อาจเป็นของบัญชีเดิมและบัญชีใหม่อาจ resume ไม่ได้ ใน Telegram ให้ส่ง `/clear` แล้วรอข้อความแจ้งเตือนจาก Codex session ใหม่ หรือใช้ `/sessions` ตามด้วย `/use <ลำดับ>` หลังจากมี session ของบัญชีใหม่แล้ว หากเปลี่ยนบัญชี Telegram ด้วยจึงค่อยรัน `npm.cmd run setup` ใหม่ เพราะ `TELEGRAM_ALLOWED_USER_ID` และ `TELEGRAM_ALLOWED_CHAT_ID` จะเปลี่ยน
 
 ### Doctor แจ้ง `Codex executable: not found`
 
@@ -379,7 +420,7 @@ npm.cmd run startup:status
 
 ### Telegram ส่งข้อความแล้ว Codex ไม่ทำต่อ
 
-ตรวจว่าได้ reply completion message โดยตรงและ Codex CLI ยังล็อกอินอยู่:
+ตรวจว่าเลือก session ด้วย `/use <ลำดับ>` แล้ว และ Codex CLI ยังล็อกอินอยู่:
 
 ```powershell
 codex.cmd login status
@@ -390,7 +431,7 @@ npm.cmd run doctor
 
 ### รีสตาร์ต Bridge ระหว่างที่ Codex กำลังทำงาน
 
-process ของ Codex ที่ Bridge เปิดไว้อาจถูกหยุดตามไปด้วย เวอร์ชันนี้จะไม่ปล่อยให้งานค้างเป็น `running` อีกต่อไป เมื่อ Bridge เปิดใหม่ bot จะแจ้งจำนวนงานที่ถูกหยุด และ `/jobs` จะแสดง `⚠️ ถูกหยุดตอน Bridge รีสตาร์ต` ให้เลือก session เดิมด้วย `/use <ลำดับ>` แล้วส่งคำสั่งนั้นใหม่ อย่ารีสตาร์ต Bridge ระหว่างที่มีสถานะ `▶️ กำลังทำ`
+process ของ Codex ที่ Bridge เปิดไว้อาจถูกหยุดตามไปด้วย เวอร์ชันนี้จะไม่ปล่อยให้งานค้างเป็น `running` อีกต่อไป เมื่อ Bridge เปิดใหม่ bot จะแจ้งจำนวนงานที่ถูกหยุด และ `/jobs` จะแสดง `⚠️ ถูกหยุดตอน Bridge รีสตาร์ต` ให้เลือก session เดิมด้วย `/use <ลำดับ>` แล้วส่งคำสั่งนั้นใหม่ อย่ารีสตาร์ต Bridge ขณะที่ PowerShell ยังแสดงว่า Codex กำลังทำงาน
 
 ### Codex ทำต่อแล้ว แต่หน้าต่าง Desktop ไม่อัปเดต
 

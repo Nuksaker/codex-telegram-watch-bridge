@@ -6,7 +6,7 @@ describe('safe Codex resume', () => {
     const prompt = 'แก้ "test"\n`whoami` & del * | echo $HOME; $(id)';
     const spec = buildResumeSpawnSpec('codex.exe', 'session_12345678', prompt, 'C:\\repo', 6000);
     expect(spec.options.shell).toBe(false);
-    expect(spec.args).toEqual(['exec', 'resume', 'session_12345678', prompt]);
-    expect(spec.args).toHaveLength(4);
+    expect(spec.args).toEqual(['exec', 'resume', '--json', 'session_12345678', prompt]);
+    expect(spec.args).toHaveLength(5);
   });
 });

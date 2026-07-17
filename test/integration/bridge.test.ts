@@ -40,11 +40,7 @@ describe('bridge integration', () => {
     await service.handleStop({ session_id: 'session_B1234567', turn_id: 'turn_B123', cwd: 'C:\\work\\beta', hook_event_name: 'Stop' });
     await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 500, replyToMessageId: 100, text: 'ทำต่อใน A นะ `x` & echo hi' });
     expect(codex.calls).toEqual([{ sessionId: 'session_A1234567', prompt: 'ทำต่อใน A นะ `x` & echo hi', cwd: 'C:\\work\\alpha' }]);
-    expect(telegram.texts.map((entry) => entry.text)).toEqual([
-      expect.stringContaining('📝 รับงาน #1 แล้ว'),
-      expect.stringContaining('▶️ งาน #1 กำลังทำ'),
-      expect.stringContaining('✅ งาน #1 สำเร็จ'),
-    ]);
+    expect(telegram.texts).toHaveLength(0);
   });
 
   it('shows redacted command previews and lifecycle in /jobs', async () => {
@@ -59,12 +55,28 @@ describe('bridge integration', () => {
     });
     await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 501, text: '/jobs' });
 
-    const accepted = telegram.texts[0]?.text ?? '';
     const history = telegram.texts.at(-1)?.text ?? '';
-    expect(accepted).toContain('คำสั่ง: แก้ login [REDACTED]');
     expect(history).toContain('#1 ✅ สำเร็จ');
     expect(history).toContain('แก้ login [REDACTED]');
     expect(history).not.toContain('super-secret-value');
+  });
+
+  it('keeps Telegram quiet during successful work but reports a failed CLI run', async () => {
+    const { service, telegram, codex } = fixture();
+    await service.handleStop({ session_id: 'session_A1234567', turn_id: 'turn_A123', cwd: 'C:\\work\\alpha', hook_event_name: 'Stop' });
+    codex.result = { exitCode: 1, stdout: '', stderr: 'failed' };
+
+    await service.handleTelegramText({
+      userId: 11,
+      chatId: 22,
+      messageId: 500,
+      replyToMessageId: 100,
+      text: 'ทดสอบงานที่ล้มเหลว',
+    });
+
+    expect(telegram.texts).toHaveLength(1);
+    expect(telegram.texts[0]?.chatId).toBe(22);
+    expect(telegram.texts[0]?.text).toContain('❌ งาน #1 ล้มเหลว (exit 1)');
   });
 
   it('unauthorized users cannot trigger Codex or view sessions', async () => {
@@ -73,5 +85,16 @@ describe('bridge integration', () => {
     await service.handleTelegramText({ userId: 999, chatId: 22, messageId: 500, replyToMessageId: 100, text: '/sessions' });
     expect(codex.calls).toHaveLength(0);
     expect(telegram.texts).toHaveLength(0);
+  });
+
+  it('/clear forgets the active target and requires /use before another command', async () => {
+    const { service, codex, telegram } = fixture();
+    await service.handleStop({ session_id: 'session_A1234567', turn_id: 'turn_A123', cwd: 'C:\\work\\alpha', hook_event_name: 'Stop' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 501, text: '/use 1' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 502, text: '/clear' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 503, text: 'อย่าส่งงานนี้ทันที' });
+
+    expect(codex.calls).toHaveLength(0);
+    expect(telegram.texts.at(-1)?.text).toContain('ส่ง /use <ลำดับ>');
   });
 });

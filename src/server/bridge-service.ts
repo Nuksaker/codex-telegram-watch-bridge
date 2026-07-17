@@ -10,6 +10,8 @@ import { safeExcerpt, shortId } from '../security/redact.js';
 import type { ResumeJobSummary } from '../storage/database.js';
 
 export class BridgeService {
+  private readonly requireExplicitSelection = new Set<number>();
+
   constructor(
     private readonly config: BridgeConfig,
     private readonly database: BridgeDatabase,
@@ -58,11 +60,13 @@ export class BridgeService {
     let sessionId = message.replyToMessageId === undefined
       ? undefined
       : this.database.sessionForMessage(message.chatId, message.replyToMessageId);
+    if (sessionId) this.requireExplicitSelection.delete(message.chatId);
     sessionId ??= this.database.activeTarget(message.chatId);
     if (!sessionId) {
       const recent = this.database.recentSessions();
-      if (recent.length === 1) sessionId = recent[0]?.sessionId;
-      else if (recent.length > 1) {
+      if (recent.length === 1 && !this.requireExplicitSelection.has(message.chatId)) {
+        sessionId = recent[0]?.sessionId;
+      } else if (recent.length > 0) {
         await this.telegram.sendText(message.chatId, selectionText(recent));
         return;
       }
@@ -79,28 +83,17 @@ export class BridgeService {
     try {
       const promptPreview = safeExcerpt(message.text, 240);
       const submission = this.queue.enqueue(sessionId, message.text, session.cwd, message.messageId, promptPreview);
-      const accepted = await this.telegram.sendText(message.chatId, acceptedJobText(
-        submission.jobId,
-        session.project,
-        sessionId,
-        promptPreview,
-      ));
-      this.database.mapMessage(accepted.chatId, accepted.messageId, sessionId, `job_${submission.jobId}`, 'job');
       await submission.started;
-      const running = await this.telegram.sendText(
-        message.chatId,
-        `▶️ งาน #${submission.jobId} กำลังทำใน ${session.project} (${shortId(sessionId)})`,
-      );
-      this.database.mapMessage(running.chatId, running.messageId, sessionId, `job_${submission.jobId}`, 'job');
       const result = await submission.completion;
       if (result.error !== undefined) {
         this.logger.warn({ err: result.error, jobId: submission.jobId }, 'Codex resume process failed');
       }
-      const finished = result.status === 'completed'
-        ? `✅ งาน #${submission.jobId} สำเร็จ\nรอหรืออ่านข้อความสรุป “สิ่งที่ทำเสร็จ” จาก Codex ได้เลย`
-        : `❌ งาน #${submission.jobId} ล้มเหลว${result.exitCode === null ? '' : ` (exit ${result.exitCode})`}\nใช้ /jobs เพื่อตรวจประวัติ แล้วรัน npm.cmd run doctor ที่เครื่อง Windows`;
-      const sent = await this.telegram.sendText(message.chatId, finished);
-      this.database.mapMessage(sent.chatId, sent.messageId, sessionId, `job_${submission.jobId}`, 'job');
+      if (result.status === 'failed') {
+        await this.telegram.sendText(
+          message.chatId,
+          `❌ งาน #${submission.jobId} ล้มเหลว${result.exitCode === null ? '' : ` (exit ${result.exitCode})`}\nใช้ /jobs เพื่อตรวจประวัติ แล้วรัน npm.cmd run doctor ที่เครื่อง Windows`,
+        );
+      }
     } catch (error) {
       const reason = error instanceof Error && error.message === 'SESSION_BUSY'
         ? 'session นี้กำลังทำงานอยู่ กรุณารอให้จบก่อน'
@@ -114,7 +107,7 @@ export class BridgeService {
     const command = message.text.trim().split(/\s+/, 1)[0]?.toLowerCase();
     if (!command?.startsWith('/')) return false;
     if (command === '/start' || command === '/help') {
-      await this.telegram.sendText(message.chatId, 'Bridge พร้อมรับคำสั่ง\n/ping /status /sessions /jobs\nเลือกด้วย /use <ลำดับ> แล้วส่งคำสั่งได้จาก Apple Watch');
+      await this.telegram.sendText(message.chatId, 'Bridge พร้อมรับคำสั่ง\n/ping /status /sessions /use /clear /jobs\nเลือกด้วย /use <ลำดับ> แล้วส่งคำสั่งได้จาก Apple Watch');
       return true;
     }
     if (command === '/ping') {
@@ -142,8 +135,19 @@ export class BridgeService {
       if (!chosen) await this.telegram.sendText(message.chatId, `กรุณาใช้ /use <number> จากรายการนี้\n${selectionText(sessions)}`);
       else {
         this.database.setActiveTarget(message.chatId, chosen.sessionId);
+        this.requireExplicitSelection.delete(message.chatId);
         await this.telegram.sendText(message.chatId, `เลือก ${chosen.project} (${shortId(chosen.sessionId)}) สำหรับข้อความต่อจากนี้แล้ว`);
       }
+      return true;
+    }
+    if (command === '/clear') {
+      const cleared = this.database.clearActiveTarget(message.chatId);
+      this.requireExplicitSelection.add(message.chatId);
+      const prefix = cleared ? 'ล้าง session ที่เลือกค้างไว้แล้ว' : 'ตอนนี้ไม่มี session ที่เลือกค้างไว้';
+      await this.telegram.sendText(
+        message.chatId,
+        `${prefix}\nส่ง /sessions แล้วใช้ /use <ลำดับ> ก่อนส่งคำสั่งถัดไป`,
+      );
       return true;
     }
     if (command === '/mute') {
@@ -173,14 +177,6 @@ export class BridgeService {
     await this.telegram.sendText(message.chatId, 'ไม่รู้จักคำสั่งนี้ ใช้ /help เพื่อดูคำสั่งที่รองรับ');
     return true;
   }
-}
-
-function acceptedJobText(jobId: number, project: string, sessionId: string, promptPreview: string): string {
-  return `📝 รับงาน #${jobId} แล้ว
-โปรเจกต์: ${project}
-Session: ${shortId(sessionId)}
-คำสั่ง: ${promptPreview}
-สถานะ: รอเริ่มทำ`;
 }
 
 function jobsText(jobs: ResumeJobSummary[]): string {

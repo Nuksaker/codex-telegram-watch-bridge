@@ -15,6 +15,9 @@ describe('persistent mapping and deduplication', () => {
     expect(database.sessionForMessage(22, 100)).toBe(event.sessionId);
     database.setActiveTarget(22, event.sessionId);
     expect(database.activeTarget(22)).toBe(event.sessionId);
+    expect(database.clearActiveTarget(22)).toBe(true);
+    expect(database.activeTarget(22)).toBeUndefined();
+    expect(database.clearActiveTarget(22)).toBe(false);
   });
 
   it('stores a safe job preview and interrupts unfinished jobs after restart', () => {

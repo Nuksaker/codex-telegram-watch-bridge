@@ -8,9 +8,9 @@ A Windows-first local bridge that sends private Codex `Stop` notifications to Te
 - Fast Stop-hook adapter with a 1.5 second default timeout and bounded atomic spool.
 - Telegram Bot API long polling through grammY; both private `user_id` and `chat_id` are required.
 - SQLite event deduplication and Telegram message-to-Codex-session mappings.
-- Safe `codex exec resume <SESSION_ID> <PROMPT>` spawning with `shell: false` and discrete arguments.
+- Safe `codex exec resume --json <SESSION_ID> <PROMPT>` spawning with `shell: false`, discrete arguments, and live JSONL progress rendering in the bridge terminal.
 - Explicit-reply-first routing, safe ambiguity handling, per-session lock, and global queue limit.
-- Watch-friendly job receipts, running/completed/failed updates, and `/jobs` history with redacted prompt previews.
+- Completion-only Telegram notifications, failure alerts, and `/jobs` history with redacted prompt previews.
 - Startup recovery that marks abandoned queued/running jobs as interrupted instead of leaving stale status behind.
 - Setup, doctor, reversible user hook installer, and optional Windows Scheduled Task commands.
 - Offline unit/integration tests with fake Telegram and fake Codex implementations.
@@ -66,10 +66,12 @@ flowchart TD
 
 ## Apple Watch command flow
 
-When there is more than one recent Codex session, send `/sessions`, then `/use 1` (or another listed number). Send the command as normal Telegram text after that. The bridge replies with:
+When there is more than one recent Codex session, send `/sessions`, then `/use 1` (or another listed number). Send the command as normal Telegram text after that. Use `/clear` to forget the saved target; the bridge then requires an explicit `/use` before accepting another floating command.
 
-1. `📝` a numbered receipt containing the project, short session ID, and redacted command preview;
-2. `▶️` confirmation that Codex has started;
-3. `✅` success or `❌` failure, followed by the normal Stop-hook summary when available.
+Run the bridge in a visible PowerShell window during a demo. The terminal renders live, human-readable events from `codex exec --json`, including commands, file changes, tool calls, agent messages, and the final turn status. Reasoning events are deliberately omitted, and displayed values pass through secret redaction.
 
-Use `/jobs` or `/history` to see the five most recent commands and their state. If Windows or the bridge restarts during a command, the abandoned job is shown as interrupted and the bot asks you to send it again.
+Do not open a second interactive `codex` process expecting it to mirror the bridge run. It is a separate CLI client and session. The visible `npm.cmd run start` window is the realtime viewer for work launched by Telegram.
+
+Telegram stays quiet while Codex works. The trusted Stop hook sends the final “what was completed” summary; the bridge sends an additional Telegram message only when the run fails. Use `/jobs` or `/history` to inspect the five most recent commands and their stored state.
+
+A Scheduled Task runs hidden, so it keeps the Watch workflow available but does not provide a visible live terminal. Stop the hidden bridge before starting a visible demo instance to avoid a port conflict.
