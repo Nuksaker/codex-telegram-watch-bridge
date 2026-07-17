@@ -169,7 +169,7 @@ npm.cmd run doctor
 เปิด PowerShell หน้าต่างแรกแล้วรัน:
 
 ```powershell
-Set-Location 'D:\Nukker\codex-telegram-watch-bridge'
+Set-Location 'C:\PathFolder\codex-telegram-watch-bridge'
 npm.cmd run start
 ```
 
