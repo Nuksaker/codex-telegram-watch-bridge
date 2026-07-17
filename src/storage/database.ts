@@ -16,6 +16,11 @@ export interface ResumeJobSummary {
   finishedAt: string | null;
 }
 
+export interface ClearSessionRegistryResult {
+  clearedSessions: number;
+  blockedJobs: number;
+}
+
 export class BridgeDatabase {
   readonly db: DatabaseSync;
 
@@ -144,6 +149,28 @@ export class BridgeDatabase {
   clearActiveTarget(chatId: number): boolean {
     const result = this.db.prepare('DELETE FROM active_targets WHERE chat_id = ?').run(chatId);
     return result.changes > 0;
+  }
+
+  clearSessionRegistry(): ClearSessionRegistryResult {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const unfinished = this.db.prepare(`
+        SELECT COUNT(*) AS count FROM resume_jobs
+        WHERE status IN ('queued', 'running')
+      `).get() as { count: number };
+      if (unfinished.count > 0) {
+        this.db.exec('ROLLBACK');
+        return { clearedSessions: 0, blockedJobs: unfinished.count };
+      }
+      const sessions = this.db.prepare('DELETE FROM sessions').run();
+      this.db.prepare('DELETE FROM telegram_messages').run();
+      this.db.prepare('DELETE FROM active_targets').run();
+      this.db.exec('COMMIT');
+      return { clearedSessions: Number(sessions.changes), blockedJobs: 0 };
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   getSession(sessionId: string): { sessionId: string; cwd: string; project: string; muted: boolean } | undefined {

@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-Then follow [docs/SETUP_TH.md](docs/SETUP_TH.md). Never commit the runtime `.env`, Telegram bot token, database, spool, or logs.
+Then follow [docs/SETUP_EN.md](docs/SETUP_EN.md) or [docs/SETUP_TH.md](docs/SETUP_TH.md). Never commit the runtime `.env`, Telegram bot token, database, spool, or logs.
 
 ## Architecture
 
@@ -66,7 +66,9 @@ flowchart TD
 
 ## Apple Watch command flow
 
-When there is more than one recent Codex session, send `/sessions`, then `/use 1` (or another listed number). Send the command as normal Telegram text after that. Use `/clear` to forget the saved target; the bridge then requires an explicit `/use` before accepting another floating command.
+When there is more than one recent Codex session, send `/sessions`, then `/use 1` (or another listed number). Send the command as normal Telegram text after that. Use `/clear` to forget only the saved target; the bridge then requires an explicit `/use` before accepting another floating command.
+
+Use `/clearall` to remove every saved session and Telegram reply mapping from the bridge. This does not delete real Codex tasks, transcripts, or `/jobs` history. Floating commands remain unavailable until a new Codex completion arrives through the Stop hook. The command refuses to run while a resume job is queued or running.
 
 Run the bridge in a visible PowerShell window during a demo. The terminal renders live, human-readable events from `codex exec --json`, including commands, file changes, tool calls, agent messages, and the final turn status. Reasoning events are deliberately omitted, and displayed values pass through secret redaction.
 

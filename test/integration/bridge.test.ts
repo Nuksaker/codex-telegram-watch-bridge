@@ -97,4 +97,24 @@ describe('bridge integration', () => {
     expect(codex.calls).toHaveLength(0);
     expect(telegram.texts.at(-1)?.text).toContain('ส่ง /use <ลำดับ>');
   });
+
+  it('/clearall removes all routing until a new completion creates a session', async () => {
+    const { service, codex, telegram } = fixture();
+    await service.handleStop({ session_id: 'session_A1234567', turn_id: 'turn_A123', cwd: 'C:\\work\\alpha', hook_event_name: 'Stop' });
+    await service.handleStop({ session_id: 'session_B1234567', turn_id: 'turn_B123', cwd: 'C:\\work\\beta', hook_event_name: 'Stop' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 501, text: '/use 1' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 502, text: '/clearall' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 503, text: 'ยังไม่ควรทำงาน' });
+
+    expect(codex.calls).toHaveLength(0);
+    expect(telegram.texts.at(-1)?.text).toContain('ยังไม่มี Codex session');
+
+    await service.handleStop({ session_id: 'session_C1234567', turn_id: 'turn_C123', cwd: 'C:\\work\\gamma', hook_event_name: 'Stop' });
+    await service.handleTelegramText({ userId: 11, chatId: 22, messageId: 504, text: 'ทำงานใน session ใหม่' });
+    expect(codex.calls).toEqual([{
+      sessionId: 'session_C1234567',
+      prompt: 'ทำงานใน session ใหม่',
+      cwd: 'C:\\work\\gamma',
+    }]);
+  });
 });

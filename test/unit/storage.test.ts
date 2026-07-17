@@ -38,4 +38,23 @@ describe('persistent mapping and deduplication', () => {
       expect.objectContaining({ jobId: queued, promptPreview: 'แก้หน้า login', status: 'interrupted' }),
     ]);
   });
+
+  it('clears bridge session routing only when no jobs are unfinished', () => {
+    database = new BridgeDatabase(':memory:');
+    const event = { sessionId: 'session_12345678', turnId: 'turn_1234', project: 'app', cwd: 'C:\\app' };
+    database.recordStopEvent(event);
+    database.mapMessage(22, 100, event.sessionId, event.turnId);
+    database.setActiveTarget(22, event.sessionId);
+    const jobId = database.createJob(event.sessionId, 101, 'hash', 'งานทดสอบ');
+
+    expect(database.clearSessionRegistry()).toEqual({ clearedSessions: 0, blockedJobs: 1 });
+    expect(database.recentSessions()).toHaveLength(1);
+
+    database.updateJob(jobId, 'completed', 0);
+    expect(database.clearSessionRegistry()).toEqual({ clearedSessions: 1, blockedJobs: 0 });
+    expect(database.recentSessions()).toHaveLength(0);
+    expect(database.sessionForMessage(22, 100)).toBeUndefined();
+    expect(database.activeTarget(22)).toBeUndefined();
+    expect(database.recentJobs()).toHaveLength(1);
+  });
 });

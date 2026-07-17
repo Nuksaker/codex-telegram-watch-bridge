@@ -107,7 +107,7 @@ export class BridgeService {
     const command = message.text.trim().split(/\s+/, 1)[0]?.toLowerCase();
     if (!command?.startsWith('/')) return false;
     if (command === '/start' || command === '/help') {
-      await this.telegram.sendText(message.chatId, 'Bridge พร้อมรับคำสั่ง\n/ping /status /sessions /use /clear /jobs\nเลือกด้วย /use <ลำดับ> แล้วส่งคำสั่งได้จาก Apple Watch');
+      await this.telegram.sendText(message.chatId, 'Bridge พร้อมรับคำสั่ง\n/ping /status /sessions /use /clear /clearall /jobs\nเลือกด้วย /use <ลำดับ> แล้วส่งคำสั่งได้จาก Apple Watch');
       return true;
     }
     if (command === '/ping') {
@@ -148,6 +148,22 @@ export class BridgeService {
         message.chatId,
         `${prefix}\nส่ง /sessions แล้วใช้ /use <ลำดับ> ก่อนส่งคำสั่งถัดไป`,
       );
+      return true;
+    }
+    if (command === '/clearall' || command === '/clear-all') {
+      const result = this.database.clearSessionRegistry();
+      if (result.blockedJobs > 0) {
+        await this.telegram.sendText(
+          message.chatId,
+          `ยังล้างไม่ได้ มีงานกำลังรันหรือรอคิว ${result.blockedJobs} งาน\nรอให้จบก่อนแล้วส่ง /clearall ใหม่`,
+        );
+      } else {
+        this.requireExplicitSelection.delete(message.chatId);
+        await this.telegram.sendText(
+          message.chatId,
+          `🧹 ล้าง session ใน Bridge แล้ว ${result.clearedSessions} รายการ\nตอนนี้ยังสั่งงานต่อไม่ได้จนกว่าจะมีข้อความ completion ใหม่จาก Codex\nCodex task และ transcript จริงไม่ได้ถูกลบ`,
+        );
+      }
       return true;
     }
     if (command === '/mute') {

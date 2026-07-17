@@ -7,6 +7,7 @@ import { Writable } from 'node:stream';
 import { Bot } from 'grammy';
 import { bridgeConfigSchema } from '../config/schema.js';
 import { defaultRuntimeDir, runtimeEnvPath } from '../config/paths.js';
+import { resolveCodexBinForSetup } from '../config/codex-bin.js';
 
 let outputMuted = false;
 const guardedOutput = new Writable({
@@ -41,16 +42,19 @@ if (confirm !== 'y') throw new Error('ยกเลิกเพื่อป้อ
 const runtimeInput = (await prompt.question(`Runtime directory [${defaultRuntimeDir()}]: `)).trim();
 prompt.close();
 const runtimeDir = runtimeInput || defaultRuntimeDir();
+const codexBin = await resolveCodexBinForSetup({ runtimeDir });
 const values = bridgeConfigSchema.parse({
   TELEGRAM_BOT_TOKEN: token,
   TELEGRAM_ALLOWED_USER_ID: latest.userId,
   TELEGRAM_ALLOWED_CHAT_ID: latest.chatId,
   BRIDGE_SECRET: crypto.randomBytes(32).toString('base64url'),
   BRIDGE_RUNTIME_DIR: runtimeDir,
+  CODEX_BIN: codexBin,
 });
 await fs.mkdir(runtimeDir, { recursive: true });
 const lines = Object.entries(values).map(([key, value]) => `${key}=${String(value)}`);
 const filename = runtimeEnvPath(runtimeDir);
 await fs.writeFile(filename, `${lines.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
 console.log(`ตั้งค่าเสร็จแล้ว: ${path.dirname(filename)}`);
+console.log(`Codex executable: ${codexBin}`);
 console.log('ขั้นต่อไป: npm run doctor');
